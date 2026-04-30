@@ -190,6 +190,19 @@ func (c *Client) DialTCP(ctx context.Context, addr *net.TCPAddr) (net.Conn, erro
 		}
 	}
 
+	// Fallback: if no exact resource match, try matching by IP range only (ignore port)
+	if appID == "" {
+		for _, resource := range c.ipResources {
+			if bytes.Compare(addr.IP, resource.IPMin) >= 0 && bytes.Compare(addr.IP, resource.IPMax) <= 0 {
+				if resource.Protocol == "tcp" || resource.Protocol == "all" {
+					appID = resource.AppID
+					nodeGroupID = resource.NodeGroupID
+					break
+				}
+			}
+		}
+	}
+
 	c.BestNodesRWMutex.RLock()
 	nodeAddr := c.BestNodes[nodeGroupID]
 	if nodeAddr == "" {

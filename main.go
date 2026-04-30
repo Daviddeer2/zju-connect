@@ -196,22 +196,22 @@ func main() {
 			ipSetBuilder.AddPrefix(netaddr.MustParseIPPrefix("10.0.0.0/8"))
 			ipSet, _ = ipSetBuilder.IPSet()
 		}
+	}
 
-		for _, customProxyDomain := range conf.CustomProxyDomain {
-			if domainResources != nil {
-				domainResources[customProxyDomain] = client.DomainResource{
+	for _, customProxyDomain := range conf.CustomProxyDomain {
+		if domainResources != nil {
+			domainResources[customProxyDomain] = client.DomainResource{
+				PortMin:  1,
+				PortMax:  65535,
+				Protocol: "all",
+			}
+		} else {
+			domainResources = map[string]client.DomainResource{
+				customProxyDomain: {
 					PortMin:  1,
 					PortMax:  65535,
 					Protocol: "all",
-				}
-			} else {
-				domainResources = map[string]client.DomainResource{
-					customProxyDomain: {
-						PortMin:  1,
-						PortMax:  65535,
-						Protocol: "all",
-					},
-				}
+				},
 			}
 		}
 	}
@@ -287,9 +287,6 @@ func main() {
 
 	go vpnStack.Run()
 
-	if conf.Protocol == "atrust" {
-		conf.ProxyAll = false
-	}
 	vpnDialer := dial.NewDialer(vpnStack, vpnResolver, ipResources, conf.ProxyAll, conf.DialDirectProxy)
 
 	if conf.DNSServerBind != "" {

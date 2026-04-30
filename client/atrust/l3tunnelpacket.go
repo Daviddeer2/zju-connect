@@ -42,6 +42,15 @@ func (t *L3Tunnel) processIPV4(packet zctcpip.IPv4Packet) error {
 		}
 	}
 
+	// Fallback: if no exact resource match, try matching by IP range only (ignore port)
+	for _, resource := range t.ipResources {
+		if bytes.Compare(packet.DestinationIP(), resource.IPMin) >= 0 && bytes.Compare(packet.DestinationIP(), resource.IPMax) <= 0 {
+			if resource.Protocol == protocol || resource.Protocol == "all" {
+				return t.writePacket(packet, resource.AppID, resource.NodeGroupID)
+			}
+		}
+	}
+
 	if port != -1 {
 		return fmt.Errorf("%s:%d, [%s]: %w", packet.DestinationIP(), port, protocol, client.ErrResourceNotFound)
 	}
