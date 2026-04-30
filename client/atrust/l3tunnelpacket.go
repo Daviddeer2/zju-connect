@@ -51,6 +51,13 @@ func (t *L3Tunnel) processIPV4(packet zctcpip.IPv4Packet) error {
 		}
 	}
 
+	// Last resort: use first available AppID when destination is outside all resource ranges
+	for _, resource := range t.ipResources {
+		if resource.Protocol == protocol || resource.Protocol == "all" {
+			return t.writePacket(packet, resource.AppID, resource.NodeGroupID)
+		}
+	}
+
 	if port != -1 {
 		return fmt.Errorf("%s:%d, [%s]: %w", packet.DestinationIP(), port, protocol, client.ErrResourceNotFound)
 	}

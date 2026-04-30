@@ -203,6 +203,17 @@ func (c *Client) DialTCP(ctx context.Context, addr *net.TCPAddr) (net.Conn, erro
 		}
 	}
 
+	// Last resort: use first available AppID when destination is outside all resource ranges
+	if appID == "" && len(c.ipResources) > 0 {
+		for _, resource := range c.ipResources {
+			if resource.Protocol == "tcp" || resource.Protocol == "all" {
+				appID = resource.AppID
+				nodeGroupID = resource.NodeGroupID
+				break
+			}
+		}
+	}
+
 	c.BestNodesRWMutex.RLock()
 	nodeAddr := c.BestNodes[nodeGroupID]
 	if nodeAddr == "" {
