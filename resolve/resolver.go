@@ -15,6 +15,11 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
+type ipDomainEntry struct {
+	Domain   string
+	Resource client.DomainResource
+}
+
 type Resolver struct {
 	remoteUDPResolver *net.Resolver
 	remoteTCPResolver *net.Resolver
@@ -27,6 +32,11 @@ type Resolver struct {
 	dnsCache *cache.Cache
 
 	IPPool *ippool.IPPool[client.DomainResource]
+
+	// Reverse mapping: IP → domain name + DomainResource
+	// Populated during DNS resolution, used when traffic arrives with IP only
+	ipToDomain   map[string]ipDomainEntry
+	ipToDomainMu sync.RWMutex
 
 	timer  *time.Timer
 	useTCP bool
@@ -69,6 +79,9 @@ func (r *Resolver) Resolve(ctx context.Context, host string) (resCtx context.Con
 
 	if cachedIP, found := r.getDNSCache(host); found {
 		log.Printf("%s -> %s", host, cachedIP.String())
+		if domainResourceFound {
+			r.storeIPDomain(cachedIP, host, domainResource)
+		}
 		return ctx, cachedIP, nil
 	}
 
@@ -80,6 +93,7 @@ func (r *Resolver) Resolve(ctx context.Context, host string) (resCtx context.Con
 				if err != nil {
 					log.DebugPrintf("Set IP err: %s", err)
 				}
+				r.storeIPDomain(ip, host, domainResource)
 			}
 			return ctx, ip, nil
 		}
@@ -168,6 +182,37 @@ func (r *Resolver) RemoteTCPResolver() (*net.Resolver, error) {
 		return r.remoteTCPResolver, nil
 	} else {
 		return nil, errors.New("remote TCP resolver is nil")
+	}
+}
+
+func (r *Resolver) storeIPDomain(ip net.IP, host string, resource client.DomainResource) {
+	r.ipToDomainMu.Lock()
+	defer r.ipToDomainMu.Unlock()
+	if r.ipToDomain == nil {
+		r.ipToDomain = make(map[string]ipDomainEntry)
+	}
+	r.ipToDomain[ip.String()] = ipDomainEntry{
+		Domain:   host,
+		Resource: resource,
+	}
+}
+
+func (r *Resolver) LookupDomainByIP(ip string) (ipDomainEntry, bool) {
+	r.ipToDomainMu.RLock()
+	defer r.ipToDomainMu.RUnlock()
+	entry, found := r.ipToDomain[ip]
+	return entry, found
+}
+
+func (r *Resolver) PreResolveDomains() {
+	if r.domainResources == nil {
+		return
+	}
+	for domain := range r.domainResources {
+		_, _, err := r.Resolve(context.Background(), domain)
+		if err != nil {
+			log.Printf("Pre-resolve %s failed: %s", domain, err)
+		}
 	}
 }
 

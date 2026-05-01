@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -163,6 +164,21 @@ func main() {
 	dnsResource, err := vpnClient.DNSResource()
 	if err != nil && !conf.DisableServerConfig {
 		log.Println("No DNS resource")
+	}
+
+	// Dump all IP resources to file for analysis
+	resourceDump := map[string]interface{}{
+		"ipResources":     ipResources,
+		"domainResources": domainResources,
+		"dnsResource":     dnsResource,
+	}
+	if dumpBytes, err := json.MarshalIndent(resourceDump, "", "  "); err == nil {
+		if err := os.WriteFile("/tmp/zju-resources.json", dumpBytes, 0644); err != nil {
+			log.Printf("Failed to write resource dump: %s", err)
+		} else {
+			log.Printf("Resource dump written to /tmp/zju-resources.json (%d IP resources, %d domain resources, %d dns entries)",
+				len(ipResources), len(domainResources), len(dnsResource))
+		}
 	}
 
 	if conf.Protocol == "easyconnect" {
